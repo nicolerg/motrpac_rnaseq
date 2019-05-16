@@ -20,7 +20,7 @@ checknames<-function(x,title)
 star<-t(read.delim("star_align/star_QC.txt",sep="\t",row.names=1,strip.white=TRUE,check.names=FALSE))
 star<-star[,c(6,7,9:17,25,27,29,30,31,34)]
 colnames(star)<-c("reads","avg_input_read_length","uniquely_mapped","%uniquely_mapped","avg_mapped_read_length",
-                  "num_splices","num_annotated_splices","num_GTAG_splices","num_GCAG_splice","num_ATAC_splices",
+                  "num_splices","num_annotated_splices","num_GTAG_splices","num_GCAG_splices","num_ATAC_splices",
                   "num_noncanonical_splices","%multimapped","%multimapped_toomany","%unmapped_mismatches","%unmapped_tooshort",
                   "%unmapped_other","%chimeric")
 star<-sub("%$","",star)
@@ -32,16 +32,19 @@ star<-star[samples,]
 NS<-length(samples)
 #read fastqc info
 fastqc<-readqcinfo("pre_align","fastqc")[,c("Total Sequences","%GC","total_deduplicated_percentage")]
-PAIRED<-FALSE
-if(2*length(grep("_R2$",rownames(fastqc)))==nrow(fastqc)){
-    PAIRED<-TRUE
+All_Single<-TRUE
+if(length(grep("_R2$",rownames(fastqc)))>0){
+    #some are paired
+    All_single<-FALSE
     ##paired, so we do the average of R1 and R2
-    id<-(1:(nrow(fastqc)/2))*2
-    if(sum(sub("_R2$","_R1",rownames(fastqc)[id])
-           !=rownames(fastqc)[id-1])!=0){
-        stop("the R1 and R2 files do not match in the fastqc info")
-    }
-    fastqc<-(fastqc[id-1,]+fastqc[id,])/2
+    #id<-(1:(nrow(fastqc)/2))*2
+    #if(sum(sub("_R2$","_R1",rownames(fastqc)[id])
+    #       !=rownames(fastqc)[id-1])!=0){
+    #    stop("the R1 and R2 files do not match in the fastqc info")
+    #}
+    ##fastqc<-(fastqc[id-1,]+fastqc[id,])/2
+    lab<-sub("_R2$","_R1",rownames(fastqc))
+    fastqc<-apply(fastqc,2,function(x){tapply(x,lab,mean)})
 }
 rownames(fastqc)<-sub("_R1$","",rownames(fastqc))
 
@@ -82,8 +85,9 @@ id<-c("CODING","UTR","INTRONIC","INTERGENIC","MRNA")
 loc<-match(c(paste0("PCT_",id,"_BASES"),"MEDIAN_5PRIME_TO_3PRIME_BIAS"),
            colnames(qc53)[1:Nqc53])
 qc53<-qc53[,loc,drop=FALSE]
+qc53<-round(qc53,dig=2)
 id2<-tolower(id)
-colnames(qc53)[1:6]<-c(paste0("%",id2),"median_5'_3'_bias")
+colnames(qc53)[1:6]<-c(paste0("%",id2),"median_5_3_bias")
 
 id<-grep("^%",colnames(qc53))
 qc53[,id]<-round(qc53[,id]*100,dig=2)
@@ -107,9 +111,10 @@ for(i in 1:NS){
     if(TRIM){
         zz<-pipe(paste0("grep \"with adapter\" fastq_trim/log/log.",SID,"|awk -F '[(%]' '{print $2}'"))
         zval<-scan(zz,quiet=TRUE)
-        if(length(zval)!= PAIRED+1){
-            stop("the fastq_trim log for the contained adapter% is not consistent with the pairedness of the fastq data for sample", SID)
-        }
+        ##future plan is to consider the paired info for each indivudal files
+        #if(length(zval)!= PAIRED+1){
+        #    stop("the fastq_trim log for the contained adapter% is not consistent with the pairedness of the fastq data for sample", SID)
+        #}
         misc[i,6]<-mean(zval)
         close(zz)
     }
@@ -148,5 +153,7 @@ qc<-cbind(qc,star[,-1],chr_info,qc53)
 
 id<-grep("_percent$",colnames(qc))
 colnames(qc)[id]<-paste0("%",sub("_percent$","",colnames(qc)[id]))
+colnames(qc)<-sub("^%","pct_",colnames(qc))
 
+#We could have write a date and the project folder here
 write.table(qc,"qc_info.csv",row.names=TRUE,col.names=NA,quote=FALSE,sep=",")

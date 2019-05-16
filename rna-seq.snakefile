@@ -73,7 +73,7 @@ rule star_align:
     threads: 6
     shell:
         '''
-        star_align.sh {gdir} {threads} {input} >&{log}
+        star_align.sh {gdir} {threads} {tmpdir} {input} >&{log}
         '''
 
 rule chr_info:
@@ -94,7 +94,7 @@ rule UMI_dup:
         R2_info
     shell:
         '''
-        UMI_dup.sh {input} {params}
+        UMI_dup.sh {input} {params} >&{log}
         '''
 rule rsem:
     input:
@@ -108,7 +108,7 @@ rule rsem:
     threads: 6
     shell:
         '''
-        rsem.sh {input} {gdir} {threads} {params} >&{log}
+        rsem.sh {input} {gdir} {threads} {params} {tmpdir} >&{log}
         echo "Finished rsem" > {output}
         '''
         
@@ -124,7 +124,7 @@ rule featureCounts:
         R2_info
     shell:
         '''
-        featureCounts.sh {input} {gdir} {threads} {params} >&{log}
+        featureCounts.sh {input} {gdir} {threads} {params} {tmpdir}>&{log}
         '''
 rule rRNA:
     input:
@@ -202,8 +202,8 @@ rule featureCounts_all:
         "log/featureCounts.log"
     shell:
         '''
-        cat samples | awk '{{print "featureCounts/"$0"\t"$0}}' |
-        row_paste.awk infoid=1 colid=0 skip=1 >featureCounts.txt 2>{log}
+        cat samples | awk '{{print "featureCounts/"$0"\t"$0}}' >.samples_feature
+        row_paste.awk infoid=1 colid=0 skip=1 <.samples_feature >featureCounts.txt 2>{log}
         echo "Finished featureCounts" >{output}
         '''
         
@@ -243,11 +243,13 @@ rule post_align_QC:
         "log/OK.featureCounts",
     output:
         "log/OK.post_align_QC"
+    log:
+        "log/post_align_QC.log"
     shell:
         '''
         Rscript --vanilla {root}/bin/qc53.R
         mkdir -p multiqc
-        multiqc.sh post_align star_align featureCounts rsem 
+        multiqc.sh post_align star_align featureCounts rsem >&{log} 
         echo OK >{output}
         '''
         
@@ -265,7 +267,7 @@ rule pre_align_QC:
         if [[ {fastq_ini} == "fastq_raw/" ]]; then
            fastqc_raw="fastqc_raw fastq_trim"
         fi
-        multiqc.sh pre_align fastqc $fastqc_raw
+        multiqc.sh pre_align fastqc $fastqc_raw >&{log}
         echo OK >{output}
         '''
 dup_input=expand("mark_dup/{sample}.dup_metrics",sample=samples)
